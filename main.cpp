@@ -5,22 +5,24 @@
 #include <sys/socket.h>
 #include <netinet/in.h> // For sockaddr_in
 #include <arpa/inet.h>  // For htons(), inet_ntoa()
-#include <thread>       // For std::thread
+#include <thread>       // For thread
 #include <cstdlib>      // For exit()
 #include <fstream>
 #include <sys/stat.h>     // For stat()
 #include <string>
 
+using namespace std;
+
 #define BUFFER_SIZE 1024
 
 // Helper function to determine the content type based on file extension.
-std::string get_content_type(const std::string& path) {
-    std::size_t dot_pos = path.rfind('.');
-    if (dot_pos != std::string::npos) {
-        std::string ext = path.substr(dot_pos);
+string get_content_type(const string& path) {
+    size_t dot_pos = path.rfind('.');
+    if (dot_pos != string::npos) {
+        string ext = path.substr(dot_pos);
         // Convert extension to lowercase
-        std::transform(ext.begin(), ext.end(), ext.begin(),
-                       [](unsigned char c){ return std::tolower(c); });
+        transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c){ return tolower(c); });
         if (ext == ".html" || ext == ".htm")
             return "text/html";
         else if (ext == ".json")
@@ -68,24 +70,24 @@ void handle_client(int client_socket, sockaddr_in client_address) {
     }
 
     // Parse the request line (e.g., "GET /index.html HTTP/1.1")
-    std::istringstream request_stream(buffer);
-    std::string method, path, http_version;
+    istringstream request_stream(buffer);
+    string method, path, http_version;
     request_stream >> method >> path >> http_version;
 
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    std::tm* timeinfo = std::localtime(&now_time);
+    auto now = chrono::system_clock::now();
+    time_t now_time = chrono::system_clock::to_time_t(now);
+    tm* timeinfo = localtime(&now_time);
 
-    std::string log_message = 
-        std::string(inet_ntoa(client_address.sin_addr)) +
+    string log_message = 
+        string(inet_ntoa(client_address.sin_addr)) +
          " - - []" +
-        [&]() { std::ostringstream oss; oss << std::put_time(timeinfo, "%d/%b/%Y:%H:%M:%S %z"); return oss.str(); }() +
+        [&]() { ostringstream oss; oss << put_time(timeinfo, "%d/%b/%Y:%H:%M:%S %z"); return oss.str(); }() +
          "] \"" + method + " " + path + " " + http_version + "\" ";
 
     // Only support GET and OPTIONS requests.
     if (method != "GET" && method != "OPTIONS") {
-        std::cout << log_message << "405 0" << std::endl;
-        std::string response = "HTTP/1.1 405 Method Not Allowed\r\n"
+        cout << log_message << "405 0" << endl;
+        string response = "HTTP/1.1 405 Method Not Allowed\r\n"
                                "Content-Length: 0\r\n\r\n";
         send(client_socket, response.c_str(), response.size(), 0);
         close(client_socket);
@@ -93,12 +95,12 @@ void handle_client(int client_socket, sockaddr_in client_address) {
     }
 
     // if path contains "?" or "#", remove them
-    std::size_t query_pos = path.find('?');
-    if (query_pos != std::string::npos) {
+    size_t query_pos = path.find('?');
+    if (query_pos != string::npos) {
         path = path.substr(0, query_pos);
     }
-    std::size_t fragment_pos = path.find('#');
-    if (fragment_pos != std::string::npos) {
+    size_t fragment_pos = path.find('#');
+    if (fragment_pos != string::npos) {
         path = path.substr(0, fragment_pos);
     }
 
@@ -113,14 +115,14 @@ void handle_client(int client_socket, sockaddr_in client_address) {
         struct stat path_stat;
         if (stat(path.c_str(), &path_stat) == 0 && S_ISDIR(path_stat.st_mode)) {
             // Build a redirect response to append the trailing slash.
-            std::string new_location = "/" + path + "/";
-            std::ostringstream redirect;
+            string new_location = "/" + path + "/";
+            ostringstream redirect;
             redirect << "HTTP/1.1 301 Moved Permanently\r\n"
                      << "Location: " << new_location << "\r\n"
                      << "Content-Length: 0\r\n\r\n";
-            std::string redirect_response = redirect.str();
+            string redirect_response = redirect.str();
             send(client_socket, redirect_response.c_str(), redirect_response.size(), 0);
-            std::cout << log_message << "301 0" << std::endl;
+            cout << log_message << "301 0" << endl;
             close(client_socket);
             return;
         }
@@ -133,9 +135,9 @@ void handle_client(int client_socket, sockaddr_in client_address) {
     }
 
     // Prevent directory traversal: reject any path containing ".."
-    if (path.find("..") != std::string::npos) {
-        std::cout << log_message << "403 0" << std::endl;
-        std::string forbidden_response = "HTTP/1.1 403 Forbidden\r\n"
+    if (path.find("..") != string::npos) {
+        cout << log_message << "403 0" << endl;
+        string forbidden_response = "HTTP/1.1 403 Forbidden\r\n"
                                          "Content-Length: 0\r\n\r\n";
         send(client_socket, forbidden_response.c_str(), forbidden_response.size(), 0);
         close(client_socket);
@@ -143,10 +145,10 @@ void handle_client(int client_socket, sockaddr_in client_address) {
     }
 
     // Open the requested file in binary mode.
-    std::ifstream file(path, std::ios::binary);
+    ifstream file(path, ios::binary);
     if (!file) {
-        std::cout << log_message << "404 0" << std::endl;
-        std::string not_found_response = "HTTP/1.1 404 Not Found\r\n"
+        cout << log_message << "404 0" << endl;
+        string not_found_response = "HTTP/1.1 404 Not Found\r\n"
                                          "Content-Length: 0\r\n\r\n";
         send(client_socket, not_found_response.c_str(), not_found_response.size(), 0);
         close(client_socket);
@@ -154,8 +156,8 @@ void handle_client(int client_socket, sockaddr_in client_address) {
     }
 
     if (method == "OPTIONS") {
-        std::cout << log_message << "204 0" << std::endl;
-        std::string options_response = "HTTP/1.1 204 No Content\r\n"
+        cout << log_message << "204 0" << endl;
+        string options_response = "HTTP/1.1 204 No Content\r\n"
                                        "Allow: GET, OPTIONS\r\n"
                                        "Access-Control-Allow-Origin: *\r\n"
                                        "Access-Control-Allow-Methods: GET, OPTIONS\r\n\r\n";
@@ -165,22 +167,22 @@ void handle_client(int client_socket, sockaddr_in client_address) {
     }
     
     // Determine the file size.
-    file.seekg(0, std::ios::end);
-    std::streampos file_size = file.tellg();
-    file.seekg(0, std::ios::beg);
+    file.seekg(0, ios::end);
+    streampos file_size = file.tellg();
+    file.seekg(0, ios::beg);
     
-    std::cout << log_message << "200 " << file_size << std::endl;
+    cout << log_message << "200 " << file_size << endl;
 
     // Determine the content type based on file extension.
-    std::string content_type = get_content_type(path);
+    string content_type = get_content_type(path);
 
     // Build and send the HTTP response header.
-    std::ostringstream header;
+    ostringstream header;
     header << "HTTP/1.1 200 OK\r\n"
            << "Content-Length: " << file_size << "\r\n"
            << "Content-Type: " << content_type << "\r\n"
            << "\r\n";
-    std::string header_str = header.str();
+    string header_str = header.str();
     send(client_socket, header_str.c_str(), header_str.size(), 0);
 
     // Stream the file content in fixed-size chunks.
@@ -188,7 +190,7 @@ void handle_client(int client_socket, sockaddr_in client_address) {
     char file_buffer[CHUNK_SIZE];
     while (file) {
         file.read(file_buffer, CHUNK_SIZE);
-        std::streamsize bytes = file.gcount();
+        streamsize bytes = file.gcount();
         if (bytes > 0) {
             size_t sent_total = 0;
             while (sent_total < static_cast<size_t>(bytes)) {
@@ -211,9 +213,9 @@ int main(int argc, char* argv[]) {
     int port = 8080;
     if (argc > 1) {
         try {
-            port = std::stoi(argv[1]);
-        } catch (const std::exception& e) {
-            std::cerr << "Invalid port number: " << argv[1] << "\n";
+            port = stoi(argv[1]);
+        } catch (const exception& e) {
+            cerr << "Invalid port number: " << argv[1] << "\n";
             return EXIT_FAILURE;
         }
     }
@@ -241,8 +243,8 @@ int main(int argc, char* argv[]) {
     address.sin_port = htons(port);         // Convert port to network byte order
 
     // Bind the socket to the specified IP and port
-    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
-        std::cerr << "Cannot listen on port " << port << std::endl;
+    if (::bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        cerr << "Cannot listen on port " << port << endl;
         exit(EXIT_FAILURE);
     }
 
@@ -251,7 +253,7 @@ int main(int argc, char* argv[]) {
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
-    std::cout << "Multi-threaded TCP server is listening on port " << port << std::endl;
+    cout << "Multi-threaded TCP server is listening on port " << port << endl;
 
     // Accept new connections in a loop
     while (true) {
@@ -264,7 +266,7 @@ int main(int argc, char* argv[]) {
         }
 
         // Create a new thread to handle the client connection
-        std::thread t(handle_client, client_socket, client_address);
+        thread t(handle_client, client_socket, client_address);
         t.detach(); // Detach the thread so it cleans up after finishing
     }
 
